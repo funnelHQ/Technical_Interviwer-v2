@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Questionnaire</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        #question {
+            margin-bottom: 20px;
+            font-size: 40px;
+            font-weight: bold;
+        }
+
+        #answer {
+            width: 300px;
+            height: 100px;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #candidateIdInput {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #ca34db;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+        button + button {
+            margin-top: 10px;
+        }
+
+    </style>
+</head>
+</head>
+<body>
+    <div id="question"></div>
+    <textarea id="answer"></textarea>
+    <button onclick="startSpeechRecognition()">Start Speaking</button>
+    <input type="text" id="candidateIdInput" placeholder="Enter Candidate ID">
+    <button onclick="submitAnswer()">Submit Answer</button>
+
+    <div id="scores"></div>
+
+    <script>
+        let recognition = new webkitSpeechRecognition();
+        let answeredQuestions = 0;
+        const totalQuestions = 10;
+
+        function getQuestion() {
+            fetch('/ask_question', { method: 'GET' })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('question').innerText = data.question;
+                });
+        }
+
+        recognition.onresult = function(event) {
+            let transcript = event.results[0][0].transcript;
+            document.getElementById('answer').value = transcript;
+        }
+
+        recognition.onerror = function(event) {
+            console.log('Error occurred in recognition: ', event.error);
+        }
+
+        function startSpeechRecognition() {
+            recognition.start();
+        }
+
+        function submitAnswer() {
+            const candidateId = document.getElementById('candidateIdInput').value;
+            const answer = document.getElementById('answer').value;
+
+            fetch('/test_correctness', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 'candidate_id': candidateId, 'candidate_response': answer })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Question: ' + data.question + '\nResponse: ' + data.candidate_response + '\nResult: ' + data.result);
+                getQuestion();
+            });
+
+            answeredQuestions++;
+
+            if (answeredQuestions === totalQuestions) {
+                fetchRoundScores(1);
+            }
+        }
+
+
+        function fetchRoundScores(roundNumber) {
+            fetch(`/get_round_scores/${roundNumber}`, { method: 'GET' })
+                .then(response => response.json())
+                .then(data => {
+                    const scoresDiv = document.getElementById('scores');
+                    scoresDiv.innerHTML = `<h2>Round ${data.round_number} Scores</h2>`;
+                    const scoresList = document.createElement('ul');
+
+                    data.scores.forEach(score => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = `Candidate ID: ${score.candidate_id}, Score: ${score.score}`;
+                        scoresList.appendChild(listItem);
+                    });
+
+                    scoresDiv.appendChild(scoresList);
+                });
+        }
+
+        window.onload = getQuestion;
+    </script>
+</body>
+</html>
